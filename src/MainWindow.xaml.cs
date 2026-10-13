@@ -164,7 +164,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             TextStatus.Text = draftText.Consumed ? "投稿文は保持します。必要な情報はチップで追加できます。" : "空の新規投稿欄に、一度だけ初期入力します。";
             if (browserReady && XComposer.IsX(Browser.CoreWebView2.Source)) {
                 var current = await XComposer.ReadState(Browser.CoreWebView2);
-                if (current.Kind == "waiting" && current.Diagnostics is { } diagnostics && diagnostics.TryGetProperty("editorWrappers", out var editors) && editors.GetInt32() > 0) {
+                if (!navigating && !Browser.CoreWebView2.Source.Contains("/compose/") && current.Kind == "waiting" && current.Diagnostics is { } diagnostics && diagnostics.TryGetProperty("editorWrappers", out var editors) && editors.GetInt32() > 0) {
                     draftText.Protect(); pending = photos.Select(p => p.Path).ToArray(); attempted = true;
                     TextStatus.Text = "投稿欄を確認できません。「投稿文をコピー」を使ってください。";
                     SetStatus("右側に投稿欄がありますが、その状態を確認できません。画面・文章・添付を保持しています。"); return;
