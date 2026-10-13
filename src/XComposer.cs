@@ -46,6 +46,31 @@ public static class XComposer
         var root = doc.RootElement;
         return new(root.GetProperty("kind").GetString()!, root.GetProperty("previews").GetInt32(), root.GetProperty("existing").GetBoolean(), root.TryGetProperty("diagnostics", out var diagnostics) ? diagnostics.Clone() : null);
     }
+    // Notify only state changes; no account information, page text or photo data leaves the page.
+    public static string ReadinessObserverScript => """
+        (() => {
+          if (location.origin !== 'https://x.com' || window.top !== window) return;
+          let scheduled = false, previous;
+          const notify = () => {
+            if (scheduled) return;
+            scheduled = true;
+            setTimeout(() => {
+              scheduled = false;
+              const state =
+        """ + StateScript + """
+              ;
+              const signature = JSON.stringify([state.kind, state.previews, state.existing]);
+              if (signature !== previous) {
+                previous = signature;
+                window.chrome.webview.postMessage('vrc-photo-post:composer-changed');
+              }
+            }, 50);
+          };
+          new MutationObserver(notify).observe(document, {subtree:true, childList:true, attributes:true, characterData:true});
+          document.addEventListener('load', notify, true);
+          notify();
+        })();
+        """;
     public static bool IsX(string source) => Uri.TryCreate(source, UriKind.Absolute, out var uri) && uri.Scheme == "https" && uri.Host == "x.com";
     public static async Task SetFiles(CoreWebView2 web, string[] paths, bool probe = false)
     {

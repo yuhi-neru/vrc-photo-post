@@ -35,7 +35,7 @@ public partial class MainWindow
             report.Add(new { test = "exact HTTPS X origin guard", passed = true });
             Library.Visibility = Visibility.Collapsed; Composer.Visibility = Visibility.Visible;
             Filmstrip.ItemsSource = new[] { new Photo(original) }; Filmstrip.SelectedIndex = 0;
-            await InitializeBrowser();
+            await Task.WhenAll(InitializeBrowser(), InitializeBrowser());
             var loaded = new TaskCompletionSource();
             void Completed(object? sender, CoreWebView2NavigationCompletedEventArgs e) { if (e.IsSuccess) loaded.TrySetResult(); else loaded.TrySetException(new Exception(e.WebErrorStatus.ToString())); }
             Browser.CoreWebView2.NavigationCompleted += Completed;
@@ -72,12 +72,24 @@ public partial class MainWindow
             Directory.CreateDirectory(Path.Combine(fixtureDirectory, "compose"));
             File.WriteAllText(Path.Combine(fixtureDirectory, "compose", "post.html"), fixtureHtml.Replace("role=\"dialog\"", "role=\"main\"").Replace("[role=dialog]", "[role=main]"));
             Browser.CoreWebView2.SetVirtualHostNameToFolderMapping("vrc-probe.example", fixtureDirectory, CoreWebView2HostResourceAccessKind.DenyCors);
+            var readiness = new TaskCompletionSource();
+            void Ready(object? sender, CoreWebView2WebMessageReceivedEventArgs e) {
+                if (e.Source.StartsWith("https://vrc-probe.example/", StringComparison.Ordinal)) {
+                    try { if (e.TryGetWebMessageAsString() == "vrc-photo-post:composer-changed") readiness.TrySetResult(); } catch (ArgumentException) { }
+                }
+            }
+            Browser.CoreWebView2.WebMessageReceived += Ready;
+            var observerId = await Browser.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(XComposer.ReadinessObserverScript.Replace("https://x.com", "https://vrc-probe.example"));
             var fullPageLoaded = new TaskCompletionSource();
             void FullPageCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e) { if (e.IsSuccess) fullPageLoaded.TrySetResult(); else fullPageLoaded.TrySetException(new Exception(e.WebErrorStatus.ToString())); }
             Browser.CoreWebView2.NavigationCompleted += FullPageCompleted;
             Browser.CoreWebView2.Navigate("https://vrc-probe.example/compose/post.html");
             await fullPageLoaded.Task.WaitAsync(TimeSpan.FromSeconds(20));
             Browser.CoreWebView2.NavigationCompleted -= FullPageCompleted;
+            await readiness.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Browser.CoreWebView2.WebMessageReceived -= Ready;
+            Browser.CoreWebView2.RemoveScriptToExecuteOnDocumentCreated(observerId);
+            report.Add(new { test = "composer readiness notification arrives without polling", passed = true });
             var pageState = await XComposer.ReadState(Browser.CoreWebView2);
             if (pageState.Kind != "ready" || pageState.Existing) throw new Exception("Full-page composer fixture not recognized");
             await XComposer.SetFiles(Browser.CoreWebView2, copies, probe: true);
