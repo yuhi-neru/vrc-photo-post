@@ -1,0 +1,96 @@
+# VRC Photo Post — Photo app + X
+
+Windows向けの写真ビューアと、Xの実際のWeb投稿画面を1つのウィンドウにまとめたアプリです。旧版のブラウザ拡張／Native Messaging構成を廃止し、WPF＋Microsoft WebView2で再構築しました。VRChat以外の写真にも使えます。
+
+UIはVRCの思い出を楽しむテーマです。濃いネイビーの背景、シアンの操作ボタン、紫のグラデーション、「ぶいちゃの思い出」のライブラリを組み合わせています。最新版は`artifacts/release`、配布ZIPは`artifacts/VrcPhotoPost-Windows-x64.zip`です。
+
+## 使い方
+
+### アプリだけを起動する
+
+`artifacts/release/VrcPhotoPost.exe`を起動します。ピクチャフォルダとその下の写真を新しい順に一覧表示します。左の「写真フォルダ設定」で、任意のフォルダへ変更できます。
+
+- 大きなサムネイルのタイル一覧。ファイル名検索、Ctrl／Shiftによる選択。
+- ダブルクリックで写真を開く。
+- 1〜4枚を選んで「選択した写真でポストを作成」。
+- 写真ファイルをウィンドウへドロップして開く。
+- 3秒ごとに一覧を更新。最初は180枚を表示し、「さらに表示」で180枚ずつ追加。
+
+### エクスプローラーから写真を開く
+
+1. アプリを最終的に置く場所へ展開します。フォルダ内のDLLも必要なので、exeだけを取り出さないでください。
+2. 左の「既定の写真アプリに設定」を押します。Windowsの設定でVRC Photo Postを選び、PNG／JPEGなどの既定アプリとして設定します。アプリから既定設定を強制変更しません。
+3. または写真の右クリック→「プログラムから開く」→「別のアプリを選択」でVrcPhotoPost.exeを選びます。
+4. 写真をダブルクリックすると、左に写真、右にXの投稿画面が表示されます。
+5. 初回は**右側のX画面で利用者自身がログイン**します。WebView2のブラウザ用領域でログイン状態を保持します。通常のChrome／Edgeとは別の領域なので、初回は別途ログインが必要です。期限切れ時は再ログインしてください。
+6. アプリが選んだPNG／JPEGを自動添付し、画像プレビューを確認します。文章は右側のXへ直接入力します。
+7. 利用者が画像・文章・アカウントを確認し、投稿したい場合だけ**Xの投稿ボタンを押します**。
+
+「Xへ送る」という中間ボタンはありません。既存のX下書きがある場合は自動で添付や上書きをせず、状態を表示します。右側のXで既存下書きを整理してから「新しい下書き」を押してください。
+
+**ログイン済みの実際のXで、合成PNGの自動添付と画像プレビューを確認済みです。** 手動の貼り付け・ファイル選択は不要でした。投稿自体は実施していません。Xの画面変更に影響されるため、初期テスト版として提供します。添付失敗時は、一部だけ添付されている可能性があるため、右側のXを確認せず再試行しないでください。
+
+## Xの規約とアカウントのリスク
+
+本アプリはXの公式クライアントでも、Xが承認した連携アプリでもありません。Microsoft WebView2を使用していても、Xから自動操作の許可を得たことにはなりません。
+
+[Xの自動化ルール](https://help.x.com/ja/rules-and-policies/x-automation)は、API以外の方法によるWebサイトの自動操作を禁止し、アカウントの一時ロック・永久凍結の可能性を明記しています。本アプリの画像自動添付もこの禁止事項に該当すると判断されるリスクがあります。最終投稿を本人が行うことは、規約適合や凍結回避を保証しません。
+
+動作検証の成功と、Xからの利用許可は別です。凍結リスクがないとは保証できません。現段階は実験的な初期テスト版であり、この点を理解した上で利用を判断してください。
+
+## ダウンロード
+
+[GitHub Releases](https://github.com/yuhi-neru/vrc-photo-post/releases)からWindows x64版のZIPを取得し、フォルダ全体を展開してください。
+
+## 対応環境・形式
+
+- Windows 10／11 x64。配布版には.NET 10を含めています。
+- Microsoft Edge WebView2 Runtimeが必要です。ない場合は[Microsoft公式ページ](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)からEvergreen Runtimeを導入してください。
+- 閲覧：PNG、JPEG、BMP、TIFF。破損画像・使用中画像は読み込めないことがあります。
+- X添付：PNG／JPEG、1〜4枚、各5,000,000バイト以下。GIF、動画、HEIC、WebP、自動縮小は未対応です。
+- 写真一覧の日付はファイルの更新日時です。撮影日時・ワールドメタデータの解析は未実装です。
+- 一覧化するのは設定フォルダとそのサブフォルダです。PCの全ドライブを自動で走査するものではありません。
+- SteamVR専用オーバーレイはこの再構築版の対象に含めていません。
+
+## データの扱い
+
+- 元写真を変更・削除しません。独自クラウドへアップロードしません。
+- Xの開発者API、有料API、非公開APIを直接呼び出しません。画像のアップロードは右側のXのWeb画面が通常の添付処理として行います。
+- パスワード、Cookie、ブラウザ履歴をアプリ側の独自データとして読み出しません。
+- WebView2自身はログイン状態などを `%LOCALAPPDATA%/VrcPhotoPostV2/browser` へ保持します。これはアプリ内ブラウザの保存領域です。
+- 写真フォルダ設定は同じ親フォルダの`folder.json`へ保存します。
+- 添付の検証状態は`verification.json`へ保存します。状態名・枚数・日時・WebView2のバージョンだけを含み、ファイル名・投稿文・アカウント情報・認証情報は含めません。
+- 送信対象はローカルの一時コピーにして、元画像の保存処理と切り離します。正常終了時にそのセッションのコピーを削除します。強制終了時には`attachments`に残る可能性があります。
+- 自動添付はXのHTTPS画面に限定し、一度実行した操作を自動再送しません。アプリに投稿確定をクリックする処理はありません。
+
+## ビルド
+
+開発には.NET 10 SDKとPowerShell 7を使用します。
+
+```powershell
+./scripts/build.ps1
+```
+
+生成先は`artifacts/release`です。初回はNuGetからMicrosoft.Web.WebView2と.NETの配布用ランタイムを取得するためネット接続が必要です。
+
+Windowsの関連付け登録はアプリのボタンから行えます。手動で登録する場合は`./scripts/register-app.ps1`、登録だけを解除する場合は`./scripts/unregister-app.ps1`を実行します。解除スクリプトは写真やWebView2プロファイルを削除しません。アプリを移動した場合は登録し直してください。
+
+## 実機基礎検証
+
+```powershell
+./scripts/test.ps1
+```
+
+実際のWebView2を起動し、合成PNGだけを使ってファイル入力への自動設定、changeイベント、1枚・4枚の画像プレビュー、元画像保持、サイズ制限、Xオリジン制限を確認します。外部へ画像を送信せず、Xにはログインしません。結果は`artifacts/probe-final/results.json`へ出力します。
+
+詳細と未検証事項は[検証記録](docs/verification.md)、競合比較は[類似アプリ調査](docs/similar-apps.md)にまとめています。
+
+## 技術構成
+
+写真表示はWPF、X画面はWebView2。ローカル画像を渡すときはWebView2が公開する`CallDevToolsProtocolMethodAsync`と、Chromiumの`DOM.setFileInputFiles`を使用します。これはブラウザ側のファイル入力操作であり、Xの非公開APIではありません。既存下書き、添付プレビュー、ファイル入力の認識はXのDOMに依存します。X側の変更で動作しなくなる可能性があります。
+
+- [Microsoft：WebView2 WPF](https://learn.microsoft.com/en-us/microsoft-edge/webview2/get-started/wpf)
+- [Microsoft：DevTools Protocol呼び出し](https://learn.microsoft.com/en-us/dotnet/api/microsoft.web.webview2.core.corewebview2.calldevtoolsprotocolmethodasync)
+- [Chromium：DOM.setFileInputFiles](https://chromedevtools.github.io/devtools-protocol/tot/DOM/#method-setFileInputFiles)
+- [Microsoft：WebView2保存領域](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/user-data-folder)
+- [X：写真とGIF](https://help.x.com/en/using-x/posting-gifs-and-pictures)

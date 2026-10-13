@@ -1,0 +1,56 @@
+<Window x:Class="VrcPhotoPost.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:wv="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf" Title="VRC Photo Post" Width="1320" Height="880" MinWidth="1040" MinHeight="680" Background="#091724" Foreground="#ECF9FF" FontFamily="Yu Gothic UI" AllowDrop="True" Drop="FilesDropped">
+  <Grid>
+    <Grid.ColumnDefinitions><ColumnDefinition Width="210"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+    <Border Padding="22,28" BorderBrush="#224254" BorderThickness="0,0,1,0">
+      <Border.Background><LinearGradientBrush StartPoint="0,0" EndPoint="0.8,1"><GradientStop Color="#12344B" Offset="0"/><GradientStop Color="#121E35" Offset="0.6"/><GradientStop Color="#251D40" Offset="1"/></LinearGradientBrush></Border.Background>
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Top">
+          <Border BorderBrush="#31D3E9" BorderThickness="1" CornerRadius="8" Padding="9,5" HorizontalAlignment="Left" Margin="0,0,0,14"><TextBlock Text="VRCHAT MEMORIES" FontSize="10" Foreground="#76E8F4"/></Border>
+          <TextBlock Text="VRC PHOTO POST" FontSize="18" FontWeight="Bold"/>
+          <TextBlock Text="ワールドで撮った、今日の一枚。" TextWrapping="Wrap" Foreground="#AAC5D6" Margin="0,8,0,28"/>
+          <Button Content="▦  フォトライブラリ" Click="ShowLibrary" HorizontalContentAlignment="Left" Background="#165166" Margin="0,0,0,12"/>
+          <Button Content="＋  写真を開く" Click="OpenFiles" Margin="0,0,0,12"/>
+          <Button Content="写真フォルダ設定" Click="ChangeFolder" Margin="0,0,0,12"/>
+          <Button Content="既定の写真アプリに設定" Click="RegisterDefault" Margin="0,0,0,12" FontSize="12"/>
+          <TextBlock Text="{Binding Folder}" Foreground="#939DAF" FontSize="12" TextWrapping="Wrap" Margin="0,4,0,18"/>
+          <TextBlock Text="Xへの投稿は、最後に&#x0a;あなた自身で確定します。" TextWrapping="Wrap" Foreground="#939DAF" FontSize="12"/>
+        </StackPanel>
+        <TextBlock DockPanel.Dock="Bottom" Text="いつものワールドも、&#x0a;初めての景色も。" Foreground="#9BA6D0" FontSize="12" VerticalAlignment="Bottom"/>
+      </DockPanel>
+    </Border>
+    <Grid Grid.Column="1" Margin="26,24,26,20">
+      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+      <Border Grid.Row="2" Background="#102C3E" BorderBrush="#245065" BorderThickness="1" CornerRadius="12" Padding="14,12" Margin="0,14,0,0"><TextBlock x:Name="Status" Text="思い出の写真を読み込んでいます…" TextWrapping="Wrap" FontSize="13" Foreground="#A5E8F2"/></Border>
+      <Grid x:Name="Library" Grid.RowSpan="2">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <Border CornerRadius="18" BorderBrush="#31516B" BorderThickness="1" Padding="22,20">
+          <Border.Background><LinearGradientBrush StartPoint="0,0" EndPoint="1,0.8"><GradientStop Color="#103E51" Offset="0"/><GradientStop Color="#182846" Offset="0.65"/><GradientStop Color="#332449" Offset="1"/></LinearGradientBrush></Border.Background>
+          <DockPanel><Button DockPanel.Dock="Right" Content="選んだ思い出をポスト →" Click="ComposeSelection" Background="#31D3E9" Foreground="#082531" Margin="14,0,0,0" VerticalAlignment="Center"/><StackPanel><TextBlock Text="ぶいちゃの思い出" FontSize="30" FontWeight="SemiBold"/><TextBlock Text="{Binding CountLabel}" Foreground="#AAC5D6" Margin="0,7,0,0"/></StackPanel></DockPanel>
+        </Border>
+        <DockPanel Grid.Row="1" Margin="0,22,0,18"><TextBlock Text="最近の写真" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/><TextBox x:Name="Search" DockPanel.Dock="Right" Width="250" Margin="30,0,0,0" ToolTip="ファイル名で検索" TextChanged="SearchChanged"/></DockPanel>
+        <ListBox x:Name="Tiles" Grid.Row="2" ItemsSource="{Binding Photos}" SelectionMode="Extended" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled" MouseDoubleClick="TileOpened">
+          <ListBox.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ListBox.ItemsPanel>
+          <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="Padding" Value="0"/><Setter Property="Margin" Value="0,0,10,16"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem"><Border x:Name="Outline" BorderThickness="3" BorderBrush="Transparent" CornerRadius="12"><ContentPresenter/></Border><ControlTemplate.Triggers><Trigger Property="IsSelected" Value="True"><Setter TargetName="Outline" Property="BorderBrush" Value="#31D3E9"/></Trigger><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Outline" Property="Background" Value="#244359"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style></ListBox.ItemContainerStyle>
+          <ListBox.ItemTemplate><DataTemplate><Border Width="205" CornerRadius="9" Background="#142E42" ClipToBounds="True"><StackPanel><Image Source="{Binding Thumbnail}" Width="205" Height="158" Stretch="UniformToFill"/><TextBlock Text="{Binding DateLabel}" Margin="10,10,10,3" FontSize="13"/><TextBlock Text="{Binding Name}" Margin="10,0,10,10" Foreground="#AAC5D6" FontSize="11" TextTrimming="CharacterEllipsis"/></StackPanel></Border></DataTemplate></ListBox.ItemTemplate>
+        </ListBox>
+        <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,8,0,0"><Button Content="さらに表示" Click="LoadMore"/><TextBlock Text="ダブルクリックで開く · Ctrl / Shiftで複数選択 · ファイルをドロップして開く" VerticalAlignment="Center" Foreground="#939DAF" FontSize="12"/></StackPanel>
+      </Grid>
+      <Grid x:Name="Composer" Grid.RowSpan="2" Visibility="Collapsed">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+        <DockPanel Margin="0,0,0,18"><Button Content="← 思い出一覧" Click="ShowLibrary" DockPanel.Dock="Left"/><Button Content="新しい下書き" Click="NewDraft" DockPanel.Dock="Right"/><TextBlock Text="思い出をポスト" FontSize="25" FontWeight="SemiBold" VerticalAlignment="Center" Margin="12,0,0,0"/></DockPanel>
+        <Grid Grid.Row="1"><Grid.ColumnDefinitions><ColumnDefinition Width="0.9*"/><ColumnDefinition Width="12"/><ColumnDefinition Width="1.1*"/></Grid.ColumnDefinitions>
+          <Border Background="#102337" BorderBrush="#31516B" BorderThickness="1" CornerRadius="14" Padding="16">
+            <Grid><Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+              <Image x:Name="LargePhoto" Stretch="Uniform"/>
+              <TextBlock x:Name="PhotoCaption" Grid.Row="1" TextWrapping="Wrap" Foreground="#939DAF" FontSize="12" Margin="0,14,0,12"/>
+              <ListBox x:Name="Filmstrip" Grid.Row="2" Background="Transparent" BorderThickness="0" SelectionChanged="FilmstripChanged" ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollBarVisibility="Disabled"><ListBox.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate></ListBox.ItemsPanel><ListBox.ItemTemplate><DataTemplate><Image Source="{Binding Thumbnail}" Width="90" Height="64" Stretch="UniformToFill" Margin="2"/></DataTemplate></ListBox.ItemTemplate></ListBox>
+              <TextBlock Grid.Row="3" Text="開いた写真を自動で添付します。&#x0a;文章の入力と投稿は右側のXで行えます。" Foreground="#939DAF" FontSize="13" TextWrapping="Wrap" Margin="0,14,0,0"/>
+            </Grid>
+          </Border>
+          <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Center" Background="#245065"/>
+          <Border Grid.Column="2" CornerRadius="14" Background="White"><wv:WebView2 x:Name="Browser"/></Border>
+        </Grid>
+      </Grid>
+    </Grid>
+  </Grid>
+</Window>

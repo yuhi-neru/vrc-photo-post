@@ -1,0 +1,8 @@
+**/bin/
+**/obj/
+artifacts/
+*.user
+docs/screenshots/
+.env*
+*.pfx
+*.p12
