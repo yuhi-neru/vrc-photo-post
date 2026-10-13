@@ -34,7 +34,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     public MainWindow(string[] paths)
     {
-        InitializeComponent(); DataContext = this; initial = paths;
+        InitializeComponent(); Title = $"VRC Photo Post · v{typeof(App).Assembly.GetName().Version?.ToString(3)}"; DataContext = this; initial = paths;
         try { Folder = JsonSerializer.Deserialize<string>(File.ReadAllText(Path.Combine(App.DataDirectory, "folder.json"))) ?? Folder; } catch { }
         Loaded += async (_, _) => {
             if (App.ProbeDirectory is not null) { await RunProbe(App.ProbeDirectory); return; }
@@ -259,7 +259,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                         "protected" => "入力済みの投稿文を保持しました。初期入力は行いません。",
                         _ => "初期入力を確認できません。必要なら「投稿文をコピー」を使ってください。"
                     };
-                    if (result.Kind == "protected") { RecordEvidence("existing-draft"); SetStatus("入力済みの文章・添付を保護して写真の添付を止めました。右側を確認してください。"); return; }
+                    if (result.Kind == "protected") { RecordEvidence("text-protected", diagnostics: result.Diagnostics); SetStatus("入力済みの文章・添付を保護して写真の添付を止めました。右側を確認してください。"); return; }
                 } catch { TextStatus.Text = "初期入力を確認できません。「投稿文をコピー」を使ってください。"; }
             }
             if (navigating || navigation != navigationGeneration) { SetStatus("画面が変更されたため、写真の添付を止めました。"); return; }

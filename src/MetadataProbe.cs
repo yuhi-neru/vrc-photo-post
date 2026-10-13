@@ -69,6 +69,12 @@ public partial class MainWindow
         Browser.CoreWebView2.NavigationCompleted += Completed;
         Browser.CoreWebView2.NavigateToString(fixtureHtml);
         await loaded.Task.WaitAsync(TimeSpan.FromSeconds(20)); Browser.CoreWebView2.NavigationCompleted -= Completed;
+        await Browser.CoreWebView2.ExecuteScriptAsync("const empty=document.createElement('div');empty.dataset.testid='attachments';document.querySelector('[role=dialog]').append(empty);");
+        await Browser.CoreWebView2.ExecuteScriptAsync("document.querySelector('[contenteditable]').innerHTML='<div data-block=\"true\"><br></div>';");
+        Check((await ComposerText.Insert(Browser.CoreWebView2, "#VRchat", false, probe:true)).Kind == "inserted", "Draft.js empty BR block initializes text instead of treating layout newline as user text");
+        await Browser.CoreWebView2.ExecuteScriptAsync("document.querySelector('[contenteditable]').textContent='';");
+        Check((await ComposerText.Insert(Browser.CoreWebView2, "#VRchat", false, probe:true)).Kind == "inserted", "empty X attachment container does not block initial text");
+        await Browser.CoreWebView2.ExecuteScriptAsync("document.querySelector('[contenteditable]').textContent='';");
         if (realDefault is not null) {
             Check((await ComposerText.Insert(Browser.CoreWebView2, realDefault, false, probe:true)).Kind == "inserted", "real PNG world and newline hashtag inserted into empty local WebView2 composer");
             DefaultPostText.Text = realDefault;
