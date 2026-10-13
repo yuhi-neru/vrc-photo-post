@@ -1,3 +1,4 @@
+param([string]$RealPhotoPath)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
 dotnet build "$projectRoot\src\VrcPhotoPost.csproj" -o "$projectRoot\artifacts\check"
@@ -6,13 +7,15 @@ $probeDirectory = Join-Path $projectRoot 'artifacts\probe-final'
 $resultFile = Join-Path $probeDirectory 'results.json'
 if (Test-Path -LiteralPath $resultFile) { Remove-Item -LiteralPath $resultFile }
 $previousValue = $env:VRC_PHOTO_POST_PROBE_EXIT
+$previousPhoto = $env:VRC_PHOTO_POST_REAL_PHOTO
 try {
   $env:VRC_PHOTO_POST_PROBE_EXIT = '1'
+  if($RealPhotoPath){$env:VRC_PHOTO_POST_REAL_PHOTO=(Resolve-Path -LiteralPath $RealPhotoPath).Path}else{$env:VRC_PHOTO_POST_REAL_PHOTO=$null}
   $probeProcess = Start-Process -FilePath "$projectRoot\artifacts\check\VrcPhotoPost.exe" -ArgumentList '--probe',('"'+$probeDirectory+'"') -WindowStyle Hidden -PassThru
   if (!$probeProcess.WaitForExit(60000)) { $probeProcess.Kill(); throw 'Probe timed out' }
   if (!(Test-Path -LiteralPath $resultFile)) { throw 'No probe result' }
   $result = Get-Content -LiteralPath $resultFile -Raw | ConvertFrom-Json
   if (!$result.passed) { throw $result.error }
   $result.tests | Format-Table test,passed
-  Write-Host "WebView2 runtime: $($result.runtime). Real X attachment remains a separate check."
-} finally { $env:VRC_PHOTO_POST_PROBE_EXIT = $previousValue }
+  Write-Host "WebView2 runtime: $($result.runtime). Real X attachment and text entry remain separate checks."
+} finally { $env:VRC_PHOTO_POST_PROBE_EXIT = $previousValue; $env:VRC_PHOTO_POST_REAL_PHOTO=$previousPhoto }

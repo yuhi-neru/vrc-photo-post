@@ -33,7 +33,7 @@ public static class XComposer
           diagnostics.roleImages = scope.querySelectorAll('[role="img"]').length;
           diagnostics.removalControls = scope.querySelectorAll('[data-testid="removeMedia"]').length;
           diagnostics.localizedRemovalControls = scope.querySelectorAll('button[aria-label="メディアを削除"],button[aria-label="Remove media"]').length;
-          const existing = !!editor.textContent.trim() || removals.length > 0 || imgs.length > 0;
+          const existing = !!editor.textContent.length || removals.length > 0 || imgs.length > 0;
           // X's persistent character-count meter also has role=progressbar.
           // Only media-area progress can block the attachment confirmation.
           const uploading = existing && [...scope.querySelectorAll('[data-testid="attachments"] [role="progressbar"]')].some(visible);
@@ -51,6 +51,12 @@ public static class XComposer
         (() => {
           if (location.origin !== 'https://x.com' || window.top !== window) return;
           let scheduled = false, previous;
+          document.addEventListener('beforeinput', e => {
+            if(e.isTrusted && e.target.closest?.('[data-testid="tweetTextarea_0"]')) {
+              window.__vrcPhotoPostEdited = true;
+              window.chrome.webview.postMessage('vrc-photo-post:composer-edited');
+            }
+          }, true);
           const notify = () => {
             if (scheduled) return;
             scheduled = true;

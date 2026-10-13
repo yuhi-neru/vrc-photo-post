@@ -96,8 +96,9 @@ public partial class MainWindow
             for (int i = 0; i < 30; i++) { await Task.Delay(200); pageState = await XComposer.ReadState(Browser.CoreWebView2); if (pageState.Previews == 1) break; }
             if (pageState.Previews != 1 || !pageState.Existing) throw new Exception("Full-page composer preview missing");
             report.Add(new { test = "narrow full-page composer supports automatic attachment and preview", passed = true });
+            await ProbeMetadataAndText(directory, original, report, fixtureHtml);
             using (var screenshot = File.Create(Path.Combine(directory, "webview-file-preview.png"))) await Browser.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, screenshot);
-            File.WriteAllText(Path.Combine(directory, "results.json"), JsonSerializer.Serialize(new { passed = true, runtime = Browser.CoreWebView2.Environment.BrowserVersionString, tests = report, xAttachmentVerified = false }, new JsonSerializerOptions { WriteIndented = true }));
+            File.WriteAllText(Path.Combine(directory, "results.json"), JsonSerializer.Serialize(new { passed = true, runtime = Browser.CoreWebView2.Environment.BrowserVersionString, tests = report, xAttachmentVerified = false, xTextVerified = false }, new JsonSerializerOptions { WriteIndented = true }));
             SetStatus("基礎検証に成功：WebView2でファイル変更と画像プレビューを確認。Xの添付は未検証です。");
         } catch (Exception error) {
             File.WriteAllText(Path.Combine(directory, "results.json"), JsonSerializer.Serialize(new { passed = false, error = error.ToString(), tests = report }, new JsonSerializerOptions { WriteIndented = true })); SetStatus("基礎検証失敗：" + error.Message);

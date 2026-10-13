@@ -12,7 +12,8 @@ public sealed class Photo(string path) : INotifyPropertyChanged
     public string Name => System.IO.Path.GetFileName(Path);
     public DateTime Date { get; } = File.GetLastWriteTime(path);
     public string DateLabel => Date.ToString("yyyy年M月d日  HH:mm");
-    public string? WorldName { get; init; }
+    public string? WorldName { get; private set; }
+    internal void SetWorldName(string? value) { WorldName = value; Changed(nameof(WorldName)); }
     BitmapSource? thumbnail;
     bool requested;
     public BitmapSource? Thumbnail {

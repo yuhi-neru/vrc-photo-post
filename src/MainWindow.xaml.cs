@@ -12,6 +12,11 @@ namespace VrcPhotoPost;
 public partial class MainWindow : Window, INotifyPropertyChanged
 {
     public ObservableCollection<Photo> Photos { get; } = [];
+    public ObservableCollection<string> WorldNames { get; } = [];
+    readonly DraftTextSession draftText = new();
+    readonly List<string> selectionOrder = [];
+    bool restoringSelection, textBusy;
+    string generatedText = "#VRchat";
     public string Folder { get; private set; } = Environment.GetFolderPath(Environment.SpecialFolder.MyPictures);
     public string CountLabel => $"{all.Count:N0}枚の写真 · 新しい順";
     List<Photo> all = [];
@@ -21,7 +26,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     string[] pending = [];
     bool browserReady, busy, attempted, scanning, opening, navigating;
     Task? browserInitialization;
-    int photoGeneration;
+    int photoGeneration, navigationGeneration;
     DateTime queuedAt;
     string? evidencePhase;
     readonly DispatcherTimer watch = new() { Interval = TimeSpan.FromSeconds(3) };
@@ -42,6 +47,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         Closed += (_, _) => { watch.Stop(); bridge.Stop(); Browser.Dispose(); try { if (Directory.Exists(sessionDirectory)) Directory.Delete(sessionDirectory, true); } catch { } };
     }
     void SetStatus(string value) => Status.Text = value;
+    void SetMetadata(Photo[] photos, string?[] names)
+    {
+        for (int i = 0; i < photos.Length; i++) photos[i].SetWorldName(names[i]);
+        WorldNames.Clear(); foreach (var name in DraftTextSession.Worlds(names)) WorldNames.Add(name);
+        generatedText = DraftTextSession.Build(names); DefaultPostText.Text = generatedText;
+    }
     void RecordEvidence(string phase, int previews = 0, JsonElement? diagnostics = null)
     {
         var signature = phase + previews + diagnostics?.GetRawText();
@@ -76,9 +87,13 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     }
     void ApplyFilter()
     {
-        var selection = Tiles.SelectedItems.Cast<Photo>().Select(p => p.Path).ToHashSet();
-        Photos.Clear();
-        foreach (var photo in all.Where(p => p.Name.Contains(Search.Text, StringComparison.OrdinalIgnoreCase)).Take(limit)) { Photos.Add(photo); if (selection.Contains(photo.Path)) Tiles.SelectedItems.Add(photo); }
+        var selection = selectionOrder.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        restoringSelection = true;
+        try {
+            Photos.Clear();
+            foreach (var photo in all.Where(p => p.Name.Contains(Search.Text, StringComparison.OrdinalIgnoreCase)).Take(limit)) { Photos.Add(photo); if (selection.Contains(photo.Path)) Tiles.SelectedItems.Add(photo); }
+            selectionOrder.RemoveAll(path => !Photos.Any(p => p.Path.Equals(path, StringComparison.OrdinalIgnoreCase)));
+        } finally { restoringSelection = false; }
     }
     void SearchChanged(object sender, TextChangedEventArgs e) { if (Tiles is null) return; limit = 180; ApplyFilter(); }
     void LoadMore(object sender, RoutedEventArgs e) { limit += 180; ApplyFilter(); }
@@ -108,7 +123,13 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         e.Handled = true;
         await OpenPhotos([photo.Path]);
     }
-    async void ComposeSelection(object sender, RoutedEventArgs e) => await OpenPhotos(Tiles.SelectedItems.Cast<Photo>().Select(p => p.Path).ToArray());
+    void PhotosSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (restoringSelection) return;
+        foreach (Photo photo in e.RemovedItems) selectionOrder.Remove(photo.Path);
+        foreach (Photo photo in e.AddedItems) if (!selectionOrder.Contains(photo.Path)) selectionOrder.Add(photo.Path);
+    }
+    async void ComposeSelection(object sender, RoutedEventArgs e) => await OpenPhotos(selectionOrder.ToArray());
     async void FilesDropped(object sender, DragEventArgs e) { if (e.Data.GetData(DataFormats.FileDrop) is string[] files) await OpenPhotos(files.Where(Photo.IsImage).ToArray()); }
     async void FilmstripChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -130,7 +151,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     }
     public async Task OpenPhotos(string[] paths)
     {
-        if (busy || opening) { SetStatus("写真の準備・添付処理中です。完了してから別の写真を開いてください。"); return; }
+        if (busy || opening || textBusy) { SetStatus("写真の準備・添付処理中です。完了してから別の写真を開いてください。"); return; }
         if (paths.Length is < 1 or > 4) { SetStatus("写真を1〜4枚選んでください。"); return; }
         opening = true;
         try {
@@ -138,9 +159,17 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             Filmstrip.ItemsSource = photos; Filmstrip.SelectedIndex = 0;
             Library.Visibility = Visibility.Collapsed; Composer.Visibility = Visibility.Visible;
             SetStatus("選んだ写真を開きました。Xの投稿画面を準備しています…");
+            var names = await Task.Run(() => photos.Select(p => PhotoMetadata.ReadWorldName(p.Path)).ToArray());
+            SetMetadata(photos, names);
+            TextStatus.Text = draftText.Consumed ? "投稿文は保持します。必要な情報はチップで追加できます。" : "空の新規投稿欄に、一度だけ初期入力します。";
             if (browserReady && XComposer.IsX(Browser.CoreWebView2.Source)) {
                 var current = await XComposer.ReadState(Browser.CoreWebView2);
-                if (current.Existing) { pending = photos.Select(p => p.Path).ToArray(); attempted = true; SetStatus("Xに既存の下書きがあります。内容を確認・整理してから「新しい下書き」を押してください。左の写真はまだ添付していません。"); return; }
+                if (current.Kind == "waiting" && current.Diagnostics is { } diagnostics && diagnostics.TryGetProperty("editorWrappers", out var editors) && editors.GetInt32() > 0) {
+                    draftText.Protect(); pending = photos.Select(p => p.Path).ToArray(); attempted = true;
+                    TextStatus.Text = "投稿欄を確認できません。「投稿文をコピー」を使ってください。";
+                    SetStatus("右側に投稿欄がありますが、その状態を確認できません。画面・文章・添付を保持しています。"); return;
+                }
+                if (current.Existing) { draftText.Protect(); TextStatus.Text = "既存の投稿文・下書きを保持しています。"; pending = photos.Select(p => p.Path).ToArray(); attempted = true; SetStatus("Xに既存の下書きがあります。内容を確認・整理してから「新しい下書き」を押してください。左の写真はまだ添付していません。"); return; }
             }
             pending = photos.Select(p => p.Path).ToArray(); attempted = false; queuedAt = DateTime.UtcNow;
             RecordEvidence("photo-opened");
@@ -166,7 +195,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         Browser.CoreWebView2.NewWindowRequested += (_, e) => { e.Handled = true; if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var uri) && uri.Scheme == "https") Browser.CoreWebView2.Navigate(e.Uri); };
         Browser.CoreWebView2.NavigationStarting += (_, e) => {
             if (App.ProbeDirectory is null && Uri.TryCreate(e.Uri, UriKind.Absolute, out var uri) && uri.Scheme is not ("https" or "about")) e.Cancel = true;
-            if (!e.Cancel) navigating = true;
+            if (!e.Cancel) { navigating = true; navigationGeneration++; }
         };
         Browser.CoreWebView2.PermissionRequested += (_, e) => e.State = CoreWebView2PermissionState.Deny;
         Browser.CoreWebView2.NavigationCompleted += async (_, e) => {
@@ -176,7 +205,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         };
         Browser.CoreWebView2.WebMessageReceived += async (_, e) => {
             if (!XComposer.IsX(e.Source) || !XComposer.IsX(Browser.CoreWebView2.Source)) return;
-            try { if (e.TryGetWebMessageAsString() == "vrc-photo-post:composer-changed") await Tick(); }
+            try {
+                var message = e.TryGetWebMessageAsString();
+                if (message == "vrc-photo-post:composer-edited") draftText.Protect();
+                if (message == "vrc-photo-post:composer-changed") await Tick();
+            }
             catch (ArgumentException) { }
         };
         if (App.ProbeDirectory is null) await Browser.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(XComposer.ReadinessObserverScript);
@@ -186,29 +219,50 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     }
     async void NewDraft(object sender, RoutedEventArgs e)
     {
-        if (busy || opening || pending.Length == 0) return;
+        if (busy || opening || textBusy || pending.Length == 0) return;
         try {
             await InitializeBrowser();
-            if (XComposer.IsX(Browser.CoreWebView2.Source) && (await XComposer.ReadState(Browser.CoreWebView2)).Existing) {
-                SetStatus("右側のXで下書きを保存または破棄してください。既存の文章・添付画像は自動で消しません。"); return;
-            }
+            if (!XComposer.IsX(Browser.CoreWebView2.Source)) { SetStatus("右側のXで投稿欄を開いてから、新しい下書きを作成してください。"); return; }
+            var state = await XComposer.ReadState(Browser.CoreWebView2);
+            if (state.Kind != "ready") { SetStatus("投稿欄の状態を確認できないため、画面を切り替えません。右側のXを確認してください。"); return; }
+            if (state.Existing) { SetStatus("右側のXで下書きを保存または破棄してください。既存の文章・添付画像は自動で消しません。"); return; }
+            draftText.BeginNewDraft();
             attempted = false; queuedAt = DateTime.UtcNow; Browser.CoreWebView2.Navigate("https://x.com/compose/post"); bridge.Start();
             SetStatus("Xの投稿画面を準備しています…");
         } catch (Exception error) { SetStatus(error.Message); }
     }
     async Task Tick()
     {
-        if (busy || attempted || pending.Length == 0 || !browserReady || navigating) return;
+        if (busy || textBusy || attempted || pending.Length == 0 || !browserReady || navigating) return;
         busy = true;
+        var navigation = navigationGeneration;
         try {
             if (!XComposer.IsX(Browser.CoreWebView2.Source)) return;
             var state = await XComposer.ReadState(Browser.CoreWebView2);
             if (state.Kind == "login") { queuedAt = DateTime.UtcNow; RecordEvidence("waiting-for-login"); SetStatus("右側のXでログインしてください。ログイン後、選んだ写真の添付を自動で開始します。"); return; }
-            if (state.Kind != "ready") { RecordEvidence("waiting-for-composer", diagnostics: state.Diagnostics); if (DateTime.UtcNow - queuedAt > TimeSpan.FromSeconds(90)) { attempted = true; RecordEvidence("composer-unrecognized", diagnostics: state.Diagnostics); SetStatus("Xの投稿画面を認識できません。ログイン状態・通信・画面変更を確認し、「新しい下書き」で再試行してください。"); } return; }
-            if (state.Existing) { attempted = true; RecordEvidence("existing-draft", state.Previews, state.Diagnostics); SetStatus("Xに既存の下書きがあります。右側で整理してから「新しい下書き」を押してください。"); return; }
+            if (state.Kind != "ready") { RecordEvidence("waiting-for-composer", diagnostics: state.Diagnostics); if (DateTime.UtcNow - queuedAt > TimeSpan.FromSeconds(90)) { attempted = true; draftText.Protect(); TextStatus.Text = "投稿欄を確認できません。「投稿文をコピー」を使ってください。"; RecordEvidence("composer-unrecognized", diagnostics: state.Diagnostics); SetStatus("Xの投稿画面を認識できません。ログイン状態・通信・画面変更を確認し、「新しい下書き」で再試行してください。"); } return; }
+            if (state.Existing) { draftText.Protect(); TextStatus.Text = "既存の投稿文・下書きを保持しています。"; attempted = true; RecordEvidence("existing-draft", state.Previews, state.Diagnostics); SetStatus("Xに既存の下書きがあります。右側で整理してから「新しい下書き」を押してください。"); return; }
             SetStatus("写真を添付する準備をしています…");
             var copies = await XComposer.Snapshot(pending, sessionDirectory);
+            // The default must describe the exact stable image bytes being attached.
+            var snapshotNames = await Task.Run(() => copies.Select(PhotoMetadata.ReadWorldName).ToArray());
+            if (Filmstrip.ItemsSource is Photo[] selected) SetMetadata(selected, snapshotNames);
             attempted = true; // Never retry an ambiguous attachment automatically.
+            if (navigating || navigation != navigationGeneration || !XComposer.IsX(Browser.CoreWebView2.Source)) { draftText.Protect(); SetStatus("画面が変更されたため、初期入力と添付を止めました。"); return; }
+            state = await XComposer.ReadState(Browser.CoreWebView2);
+            if (state.Kind != "ready" || state.Existing) { draftText.Protect(); TextStatus.Text = "投稿欄の状態が変わったため、初期入力は行いません。"; SetStatus("右側の文章・添付を保持して、添付を止めました。"); return; }
+            if (draftText.TryConsume()) {
+                try {
+                    var result = await ComposerText.Insert(Browser.CoreWebView2, generatedText, append: false);
+                    TextStatus.Text = result.Kind switch {
+                        "inserted" => "投稿文を初期入力しました。右側で自由に編集・削除できます。",
+                        "protected" => "入力済みの投稿文を保持しました。初期入力は行いません。",
+                        _ => "初期入力を確認できません。必要なら「投稿文をコピー」を使ってください。"
+                    };
+                    if (result.Kind == "protected") { RecordEvidence("existing-draft"); SetStatus("入力済みの文章・添付を保護して写真の添付を止めました。右側を確認してください。"); return; }
+                } catch { TextStatus.Text = "初期入力を確認できません。「投稿文をコピー」を使ってください。"; }
+            }
+            if (navigating || navigation != navigationGeneration) { SetStatus("画面が変更されたため、写真の添付を止めました。"); return; }
             RecordEvidence("attaching");
             await XComposer.SetFiles(Browser.CoreWebView2, copies);
             SetStatus("写真を添付しています。投稿ボタンは押さず、画像プレビューを確認します。");
@@ -222,5 +276,25 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             RecordEvidence("preview-unconfirmed", state.Previews, state.Diagnostics); SetStatus("画像プレビューを確認できませんでした。右側で添付状況を確認してください。自動再送はしません。");
         } catch (Exception error) { attempted = true; RecordEvidence("attachment-failed"); SetStatus("自動添付に失敗しました：" + error.Message + "。右側のXを確認してください。"); }
         finally { busy = false; if (attempted) bridge.Stop(); }
+    }
+    void CopyPostText(object sender, RoutedEventArgs e)
+    {
+        try { Clipboard.SetText(generatedText); TextStatus.Text = "コピーしました。投稿欄に貼り付けてください"; }
+        catch { TextStatus.Text = "コピーできませんでした。生成文を選択してコピーしてください。"; }
+    }
+    async void AddWorldChip(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { DataContext: string world }) await AppendTextChip(world);
+    }
+    async void AddHashtagChip(object sender, RoutedEventArgs e) => await AppendTextChip("#VRchat");
+    async Task AppendTextChip(string value)
+    {
+        if (busy || opening || textBusy || navigating || !browserReady) { TextStatus.Text = "写真と投稿欄の準備が終わってから追加してください。"; return; }
+        textBusy = true; draftText.Protect();
+        try {
+            var result = await ComposerText.Insert(Browser.CoreWebView2, value, append: true);
+            TextStatus.Text = result.Kind switch { "inserted" => "投稿文の末尾に追加しました。", "duplicate" => "投稿文に含まれているため、追加しませんでした。", _ => "追加を確認できません。右側の投稿欄を確認してください。" };
+        } catch { TextStatus.Text = "追加を確認できません。右側の投稿欄を確認してください。"; }
+        finally { textBusy = false; }
     }
 }
